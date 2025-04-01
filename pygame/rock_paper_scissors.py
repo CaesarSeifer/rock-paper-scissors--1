@@ -5,7 +5,8 @@ from random import randint
 #==================================================================
 #Functions
 #==================================================================
-
+last_click_time = 0
+CLICK_COOLDOWN = 200 
 def fileToSprite(file_path, width, height):
     '''Converts File to sprite by loading and scaling'''
     image = pygame.image.load(file_path).convert_alpha()
@@ -13,8 +14,15 @@ def fileToSprite(file_path, width, height):
     return image
 
 def handleButton(buttonRect, handImage, handRect, choiceName, moveFlag):
-    '''moves sprite in frame is button is clicked'''
-    if buttonRect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0]:
+    global last_click_time
+    
+    current_time = pygame.time.get_ticks()
+    mouse_pressed = pygame.mouse.get_pressed()[0]
+    mouse_over = buttonRect.collidepoint(pygame.mouse.get_pos())
+    
+    # Only register click if cooldown has passed
+    if mouse_over and mouse_pressed and (current_time - last_click_time > CLICK_COOLDOWN):
+        last_click_time = current_time
         moveFlag = True
         global choice1
         choice1 = choiceName
@@ -22,7 +30,7 @@ def handleButton(buttonRect, handImage, handRect, choiceName, moveFlag):
     if moveFlag:
         screen.blit(handImage, handRect)
         if handRect.right <= 400:
-            handRect.x += 30
+            handRect.x += 60
         else:
             moveFlag = False
             global firstChoiceStatus
@@ -31,8 +39,15 @@ def handleButton(buttonRect, handImage, handRect, choiceName, moveFlag):
     return moveFlag
 
 def handleButton2(buttonRect, handImage, handRect, choiceName, moveFlag):
-    '''Same function as previous but announces a different global function'''
-    if buttonRect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0]:
+    global last_click_time
+    
+    current_time = pygame.time.get_ticks()
+    mouse_pressed = pygame.mouse.get_pressed()[0]
+    mouse_over = buttonRect.collidepoint(pygame.mouse.get_pos())
+    
+    # Only register click if cooldown has passed
+    if mouse_over and mouse_pressed and (current_time - last_click_time > CLICK_COOLDOWN):
+        last_click_time = current_time
         moveFlag = True
         global choice2
         choice2 = choiceName
@@ -40,7 +55,7 @@ def handleButton2(buttonRect, handImage, handRect, choiceName, moveFlag):
     if moveFlag:
         screen.blit(handImage, handRect)
         if handRect.right <= 400:
-            handRect.x += 30
+            handRect.x += 60
         else:
             moveFlag = False
             global secondChoiceStatus 
@@ -53,22 +68,19 @@ def botHandle(handImage, handRect, moveFlag):
     moveFlag = True
     if moveFlag:
         screen.blit(handImage, handRect)
-        if handRect.right >= 1500:
+        if handRect.right > 1470:
             handRect.x -= 30
         else:
             moveFlag = False
-            global initiateRound2
+            global initiateRound2, botMove
             initiateRound2 = True
+            botMove = False
     screen.blit(handImage, handRect)
     return moveFlag
 
-def lastOneRemains(HandRect):
-    if HandRect.right != 0:
-        HandRect.x -=30
-
 def compare(player, computer):
     if player == computer:
-        return "It's a tie!"
+        return "tie"
     elif player == 'Rock' and computer == 'Scissors':
         return "win"
     elif player == 'Paper' and computer == 'Rock':
@@ -82,18 +94,46 @@ def compare(player, computer):
     elif computer == 'Scissors' and player == 'Paper':
         return "lose"
 
-def move_bot_hand(moveType, leftHandRect, rightHandRect):
-    global botMovement, botRound2
+def move_bot_object(botObjectRRect, botObjectLRect, botMoveFlag):
+    if botMoveFlag:
+        if botObjectRRect.left <= 1470:
+            botObjectRRect.x += 60
+        if botObjectLRect.left <= 1470:
+            botObjectLRect.x += 60
+        if botObjectRRect.left >= 1470 and botObjectLRect.left >= 1470:
+            global handRetracted
+            handRetracted = True
+            return False  
+    return botMoveFlag  
 
-    if moveType:
-        if leftHandRect.left < 1470:
-            leftHandRect.x += 30
-        if rightHandRect.left < 1470:
-            rightHandRect.x += 30
-        elif leftHandRect.left >= 1470 and rightHandRect.left >= 1470:
-            moveType = False
-            botRound2 = True
-    return moveType
+def retract_hand(handRRect, handLRect, moveFlag, gateFlag):
+    if moveFlag:
+        if handRRect.right > 0:
+            handRRect.x -= 60
+        if handLRect.right > 0:
+            handLRect.x -= 60
+        if handRRect.right <= 0 and handLRect.right <= 0:
+            return False, True  # Stop moving, activate gate
+    return moveFlag, gateFlag  # Continue moving, keep gate unchanged
+
+
+def scoreText(score, botScore):
+    font = pygame.font.Font("./assets/GameOfSquids.ttf", 72) 
+    scoreSurf = font.render(f"{str(score)} : {str(botScore)}", True, (0, 0, 0)) 
+    scoreRect = scoreSurf.get_rect(midtop=(735, 20))
+    screen.blit(scoreSurf, scoreRect)
+def playerRetract(handRect):
+    handRect.x -= int(300 * (1/60))  # 300 pixels per second
+    if handRect.right < 0:
+        handRect.right = 0
+
+def botRetract(handRect):
+    handRect.x += int(300 * (1/60))  # 300 pixels per second
+    if handRect.left > 1470:
+        handRect.left = 1470
+        global restart
+        restart = True
+
 
 #==================================================================
 #initialization
@@ -109,10 +149,7 @@ background = pygame.image.load("./assets/background.png").convert() #load backgr
 background = pygame.transform.scale(background, (1470, 800)) #scale background image to fit the screen
 clock = pygame.time.Clock() #create a clock object to control the frame rate
 
-font = pygame.font.Font("./assets/Game Of Squids.ttf", 30) #load font *use font.render('<text>', <AntiAlias either True or False>, '<Color>') to type something
-score_surface = font.render("Score: ", True, (255, 255, 255)) #create a surface for the score text
-score_rect = score_surface.get_rect(topleft=(50, 50)) #create a rect for the score text
-
+#load font *use font.render('<text>', <AntiAlias either True or False>, '<Color>') to type something
 
 #==================================================================
 #Game photos
@@ -191,12 +228,25 @@ botMoveRock = None
 botMovePaper = None
 botMoveScissors = None
 
+botMoveRock2 = None
+botMovePaper2 = None
+botMoveScissors2 = None
+
 gatePaper = False
 gateScissors = False
 gateRock = False
 botRound2 = None
 
+botMove = None
+handRetracted = None
 
+diplayResults = None
+
+playerScore = 0
+robotScore = 0
+restart = False
+scoreLock = False
+comparison = None
 #==================================================================
 #Markov chain tracker for Rock Paper Scissors Minus 1
 #==================================================================
@@ -235,9 +285,7 @@ while run == True:
     #Rock paper scissors minus one
     #==================================================================
     if rpsM1 == True:
-        #default variables
-        computerScore = 0
-        playerScore = 0
+        scoreText(playerScore, robotScore)
         
         screen.blit(menuButton, (20, 10))
         if firstRound:
@@ -271,14 +319,24 @@ while run == True:
         if firstChoiceStatus == True and secondChoiceStatus == True and botStatus == False:
             botChoice1 = predict_player_move()
             botChoice2 = predict_player_move()
+            botMove = True
             botStatus = True
-        
-        if botChoice1 == 'Rock': moveFlag = botHandle(botRockL, botRockLRect, move)
-        elif botChoice1 == 'Paper': moveFlag = botHandle(botPaperL, botPaperLRect, move)
-        elif botChoice1 == 'Scissors': moveFlag = botHandle(botScissorL, botScissorLRect, move)
-        if botChoice2 == 'Rock': moveFlag = botHandle(botRockR, botRockRRect, move)
-        elif botChoice2 == 'Paper': moveFlag = botHandle(botPaperR, botPaperRRect, move)
-        elif botChoice2 == 'Scissors': moveFlag = botHandle(botScissorR, botScissorRRect, move)
+        if botMove == True:
+            if botChoice1 == 'Rock': moveFlag = botHandle(botRockL, botRockLRect, botMoveRock)
+            elif botChoice1 == 'Paper': moveFlag = botHandle(botPaperL, botPaperLRect, botMovePaper)
+            elif botChoice1 == 'Scissors': moveFlag = botHandle(botScissorL, botScissorLRect, botMoveScissors)
+            if botChoice2 == 'Rock': moveFlag = botHandle(botRockR, botRockRRect, botMoveRock)
+            elif botChoice2 == 'Paper': moveFlag = botHandle(botPaperR, botPaperRRect, botMovePaper)
+            elif botChoice2 == 'Scissors': moveFlag = botHandle(botScissorR, botScissorRRect, botMoveScissors)
+        else:
+            screen.blit(botRockL, botRockLRect)
+            screen.blit(botPaperL, botPaperLRect)
+            screen.blit(botScissorL, botScissorLRect)
+
+            screen.blit(botRockR, botRockRRect)
+            screen.blit(botPaperR, botPaperRRect)
+            screen.blit(botScissorR, botScissorRRect)
+
 
         if initiateRound2:
             if rockLHandRect.right >= 400 or rockRHandRect.right >= 400:
@@ -307,32 +365,10 @@ while run == True:
                 movePaper = True
                 moveRock = True  
                 gateScissors = True
-            if movePaper:
-                if paperRHandRect.right > 0:
-                    paperRHandRect.x -= 60
-                if paperLHandRect.right > 0:
-                    paperLHandRect.x -= 60 
-                if paperRHandRect.right <= 0 and paperLHandRect.right <= 0:
-                    movePaper = False
-                    gatePaper = True
-    
-            if moveScissors:
-                if scissorRHandRect.right > 0:
-                    scissorRHandRect.x -= 60
-                if scissorLHandRect.right > 0:
-                    scissorLHandRect.x -= 60
-                if scissorRHandRect.right <= 0 and scissorLHandRect.right <= 0:
-                    moveScissors = False
-                    gateScissors = True
+            movePaper, gatePaper = retract_hand(paperRHandRect, paperLHandRect, movePaper, gatePaper)
+            moveScissors, gateScissors = retract_hand(scissorRHandRect, scissorLHandRect, moveScissors, gateScissors)
+            moveRock, gateRock = retract_hand(rockRHandRect, rockLHandRect, moveRock, gateRock)
 
-            if moveRock:
-                if rockRHandRect.right > 0:
-                    rockRHandRect.x -= 60
-                if rockLHandRect.right > 0:
-                    rockLHandRect.x -= 60
-                if rockRHandRect.right <= 0 and rockLHandRect.right <= 0:
-                    moveRock = False
-                    gateRock = True
             if gateRock == True and gatePaper == True and gateScissors == True:
                 botRound2 = True
                 finalComputerChoice = True
@@ -345,72 +381,85 @@ while run == True:
                 botChoice = [botChoice1, botChoice2]
                 botChoice = botChoice[randint(0,1)]
                 if botChoice == 'Rock':
-                    botMovePaper = True
-                    botMoveScissors = True
-                    botRound2 = False
+                    botMovePaper2 = True
+                    botMoveScissors2 = True
                 elif botChoice == 'Paper':
-                    botMoveScissors = True
-                    botMoveRock = True
-                    botRound2 = False
+                    botMoveScissors2 = True
+                    botMoveRock2 = True
                 elif botChoice == 'Scissors':
-                    botMovePaper = True
-                    botMoveRock = True
-                    botRound2 = False
+                    botMovePaper2 = True
+                    botMoveRock2 = True
                 finalComputerChoice = False
 
-        elif botRound2 == False:
-            if botMovePaper: 
-                if botPaperRRect.right <= 1470:
-                    botPaperRRect.x += 60
-                if botPaperLRect.right <= 1470:
-                    botPaperLRect.x += 60 
-                if botPaperRRect.right >= 1470 and botPaperLRect.right >= 1470:
-                    botMovePaper = False
-            if botMoveRock:
-                if botRockRRect.right <= 1470:
-                    botRockRRect.x += 60
-                if botRockLRect.right <= 1470:
-                    botRockLRect.x += 60
-                if botRockRRect.right >= 1470 and botRockLRect.right >= 1470:
-                    botMoveRock = False
+            botMovePaper2 = move_bot_object(botPaperRRect, botPaperLRect, botMovePaper2)
+            botMoveRock2 = move_bot_object(botRockRRect, botRockLRect, botMoveRock2)
+            botMoveScissors2 = move_bot_object(botScissorRRect, botScissorLRect, botMoveScissors2)
 
-            if botMoveScissors:
-                if botScissorRRect.right <= 1470:
-                    botScissorRRect.x += 60
-                if botScissorLRect.right <= 1470:
-                    botScissorLRect.x += 60
-                if botScissorRRect.right >= 1470 and botScissorLRect.right >= 1470:
-                    botMoveScissors = False
-
-            if botMoveScissors == False and botMoveRock == False and botMovePaper == False:
-                print(compare(finalChoice, botChoice))
-
-            
-            
-    
-
-
-    
-
-        
-
-        
-        
-
-
-        
-
-        
-        
+            if handRetracted:
                 
-    
-    pygame.display.update() #updates the screen
+                comparison = compare(finalChoice, botChoice)
+                handRetracted = None
+                displayResults = True
+            if displayResults and not scoreLock:
+                scoreLock = True
+                match comparison:
+                    case "tie":
+                        gameEnd = True
+                    case "win":
+                        playerScore += 1
+                        gameEnd = True
+                    case "lose":
+                        robotScore += 1
+                        gameEnd = True
+                displayResults = False
+                scoreLock = False
+            
+            if gameEnd:
+                playerRetract(rockLHandRect)
+                playerRetract(paperLHandRect)
+                playerRetract(scissorLHandRect)
+                playerRetract(rockRHandRect)
+                playerRetract(paperRHandRect)
+                playerRetract(scissorRHandRect) 
+                
+                botRetract(botRockLRect)
+                botRetract(botPaperLRect)
+                botRetract(botScissorLRect)
+                botRetract(botRockRRect)
+                botRetract(botPaperRRect)
+                botRetract(botScissorRRect)
+                if restart:
+                    comparison = None
+                    moveRock = movePaper = moveScissors = False
+                    firstChoiceStatus = secondChoiceStatus = False
+                    choice1 = choice2 = None
+                    botStatus = False
+                    botChoice1 = botChoice2 = None
+                    initiateRound2 = False
+                    handRetracted = False
+                    displayResults = False
+                    gameEnd = False
+                    restart = False
+                    firstRound = True
+                    scoreLock = False
+                
+                    rockLHandRect.midright = (0, 200)
+                    paperLHandRect.midright = (0, 200)
+                    scissorLHandRect.midright = (0, 200)
+                    rockRHandRect.midright = (0, 600)
+                    paperRHandRect.midright = (0, 600)
+                    scissorRHandRect.midright = (0, 600)
+                    
+                    botRockLRect.midleft = (1470, 200)
+                    botPaperLRect.midleft = (1470, 200)
+                    botScissorLRect.midleft = (1470, 200)
+                    botRockRRect.midleft = (1470, 600)
+                    botPaperRRect.midleft = (1470, 600)
+                    botScissorRRect.midleft = (1470, 600)
+                
+    pygame.display.update() 
     clock.tick(60)
-
-
-
 pygame.quit() 
-
 exit()
 
     
